@@ -1,0 +1,133 @@
+---
+title: "Machine Learning Course Project"
+author: "Zana Pekmez"
+date: "24 November 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project summary:
+The goal of this project is using the data from the study "Qualitative Activity Recognition of Weight Lifting Exercises"" Proceedings of 4th International Conference in Cooperation with SIGCHI to “predict the manner in which they did the exercise.” The report should describe:
+“how you built your model”
+“how you used cross validation”
+“what you think the expected out of sample error is”
+“why you made the choices you did”
+
+Ultimately, the prediction model is to be run on the test data to predict the outcome of 20 different test cases.
+
+##Lets us first load all the appropriate packages:
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+library(knitr)
+```
+
+## DATA INPUT:
+
+```{r}
+set.seed(12345)
+
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r} 
+inTrain <- createDataPartition(training$classe, p=0.6, list=FALSE)
+myTraining <- training[inTrain, ]
+myTesting <- training[-inTrain, ]
+dim(myTraining); dim(myTesting)
+```
+## DATA CLEANING:
+
+```{r} 
+nzv <- nearZeroVar(myTraining, saveMetrics=TRUE)
+myTraining <- myTraining[,nzv$nzv==FALSE]
+
+nzv<- nearZeroVar(myTesting,saveMetrics=TRUE)
+myTesting <- myTesting[,nzv$nzv==FALSE]
+myTraining <- myTraining[c(-1)]
+```
+
+Let us remove the variables that contains missing values (NA) and further transform data to prepare it for prediction:
+```{r} 
+trainingV3 <- myTraining
+for(i in 1:length(myTraining)) {
+    if( sum( is.na( myTraining[, i] ) ) /nrow(myTraining) >= .7) {
+        for(j in 1:length(trainingV3)) {
+            if( length( grep(names(myTraining[i]), names(trainingV3)[j]) ) == 1)  {
+                trainingV3 <- trainingV3[ , -j]
+            }   
+        } 
+    }
+}
+myTraining <- trainingV3
+rm(trainingV3)
+clean1 <- colnames(myTraining)
+clean2 <- colnames(myTraining[, -58]) 
+myTesting <- myTesting[clean1]         
+testing <- testing[clean2]             
+dim(myTesting)
+dim(testing)
+for (i in 1:length(testing) ) {
+    for(j in 1:length(myTraining)) {
+        if( length( grep(names(myTraining[i]), names(testing)[j]) ) == 1)  {
+            class(testing[j]) <- class(myTraining[i])
+        }      
+    }      
+}
+testing <- rbind(myTraining[2, -58] , testing)
+testing <- testing[-1,]
+```
+## PREDTICTION WITH DECISSION TREES:
+```{r} 
+set.seed(12345)
+modFitA1 <- rpart(classe ~ ., data=myTraining, method="class")
+fancyRpartPlot(modFitA1)
+```
+```{r} 
+predictionsA1 <- predict(modFitA1, myTesting, type = "class")
+cmtree <- confusionMatrix(predictionsA1, myTesting$classe)
+cmtree
+```
+
+```{r}
+plot(cmtree$table, col = cmtree$byClass, main = paste("Decision Tree Confusion Matrix: Accuracy =", round(cmtree$overall['Accuracy'], 4)))
+```
+## PREDICTION WITH RANDOM FOREST
+
+```{r}
+set.seed(12345)
+modFitB1 <- randomForest(classe ~ ., data=myTraining)
+predictionB1 <- predict(modFitB1, myTesting, type = "class")
+cmrf <- confusionMatrix(predictionB1, myTesting$classe)
+cmrf
+```
+
+```{r}
+plot(modFitB1)
+plot(cmrf$table, col = cmtree$byClass, main = paste("Random Forest Confusion Matrix: Accuracy =", round(cmrf$overall['Accuracy'], 4)))
+```
+
+```{r}
+predictionB2 <- predict(modFitB1, testing, type = "class")
+predictionB2
+```
+## Summary of the final results
+
+Random Forests gave an Accuracy in the myTesting dataset of 99.89%, which was more accurate that Decision Tree analysis. The expected out-of-sample error is 100-99.89 = 0.11%.
+
+
+
